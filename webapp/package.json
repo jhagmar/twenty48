@@ -1,0 +1,32 @@
+{
+  "name": "2048",
+  "version": "0.0.1",
+  "description": "",
+  "main": "src/index.js",
+  "scripts": {
+    "build:engine": "cd ../engine ; wasm-pack build -- --features \"bindgen random\"",
+    "build": "webpack --config webpack.prod.js",
+    "dev": "webpack serve --open --hot --config webpack.dev.js"
+  },
+  "author": "Jonas Hagmar",
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "clean-webpack-plugin": "^4.0.0",
+    "copy-webpack-plugin": "^10.2.0",
+    "css-loader": "^6.5.1",
+    "html-webpack-plugin": "^5.5.0",
+    "mini-css-extract-plugin": "^2.4.5",
+    "path": "^0.12.7",
+    "style-loader": "^3.3.1",
+    "webpack": "^5.65.0",
+    "webpack-cli": "^4.9.1",
+    "webpack-dev-server": "^4.7.3",
+    "webpack-merge": "^5.8.0",
+    "workbox-webpack-plugin": "^6.4.2"
+  },
+  "dependencies": {
+    "dexie": "^3.2.0",
+    "qrcode": "^1.5.0",
+    "uuid": "^8.3.2"
+  }
+}

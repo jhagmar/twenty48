@@ -1,0 +1,178 @@
+CREATE DATABASE twenty48;
+
+CREATE USER 'twenty48'@'localhost' IDENTIFIED BY 'twenty48';
+
+GRANT INSERT, UPDATE, SELECT, DELETE ON twenty48.* TO 'twenty48'@'localhost';
+
+USE twenty48;
+
+create table players (
+    id binary(16) not null,
+    display_name varchar(50) not null,
+    last_activity datetime not null default now() on update now(),
+    last_change datetime not null,
+    primary key (id),
+    index(last_activity)
+);
+
+create table games (
+  id binary(16) not null,
+  seed bigint unsigned not null,
+  size bigint unsigned not null,
+  last_activity datetime default now(),
+  primary key (id),
+  index(last_activity)
+);
+
+create table players_games (
+  player_id binary(16) not null,
+  game_id binary(16) not null,
+  revision binary(16) not null,
+  score bigint unsigned not null,
+  moves json not null,
+  primary key (player_id, game_id),
+  index (game_id, player_id),
+  index (score),
+  foreign key (player_id) references players(id) on delete cascade,
+  foreign key (game_id) references games(id) on delete cascade
+);
+
+DELIMITER $$
+CREATE TRIGGER players_games_insert
+    AFTER INSERT
+    ON players_games FOR EACH ROW
+BEGIN
+    UPDATE games SET last_activity = now()
+    WHERE games.id = NEW.game_id
+      AND games.last_activity < now();
+    UPDATE players SET last_activity = now()
+    WHERE players.id = NEW.player_id
+      AND players.last_activity < now();
+END$$    
+DELIMITER ;
+
+DELIMITER $$
+CREATE TRIGGER players_games_update
+    AFTER UPDATE
+    ON players_games FOR EACH ROW
+BEGIN
+    UPDATE games SET last_activity = now()
+    WHERE games.id = NEW.game_id
+      AND games.last_activity < now();
+    UPDATE players SET last_activity = now()
+    WHERE players.id = NEW.player_id
+      AND players.last_activity < now();
+END$$    
+DELIMITER ;
+
+SET GLOBAL event_scheduler = ON;
+
+CREATE EVENT auto_delete_games
+ON SCHEDULE EVERY 24 HOUR
+STARTS CURRENT_TIMESTAMP
+DO
+   DELETE FROM games WHERE last_activity < now() - INTERVAL 2 WEEK;
+   
+INSERT INTO players(id, display_name, last_change)
+VALUES(UUID_TO_BIN('77dea2ad-3c8c-40c6-a278-7cf1a1ac9384'), 'John', now());
+
+INSERT INTO players(id, display_name, last_change)
+VALUES(UUID_TO_BIN('77dea2ad-3c8c-40c6-a278-7cf1a1ac9385'), 'Alice', now());
+
+INSERT INTO games(id, seed, size)
+VALUES(UUID_TO_BIN('76105f46-e609-4d89-bed4-30f8666512c7'), 0, 4);
+
+INSERT INTO games(id, seed, size)
+VALUES(UUID_TO_BIN('51d5147b-1b18-4a45-9172-5ddba30f73e8'), 0, 4);
+
+INSERT INTO players_games (player_id, game_id, revision, score, moves)  
+VALUES (UUID_TO_BIN('77dea2ad-3c8c-40c6-a278-7cf1a1ac9384'), UUID_TO_BIN('76105f46-e609-4d89-bed4-30f8666512c7'), UUID_TO_BIN('3d156119-9249-4f52-b858-1d5258cd8395'), 4, '["Down"]')
+ON DUPLICATE KEY UPDATE
+score = 4, moves = '["Down"]';
+
+INSERT INTO players_games (player_id, game_id, revision, score, moves)  
+VALUES (UUID_TO_BIN('77dea2ad-3c8c-40c6-a278-7cf1a1ac9384'), UUID_TO_BIN('51d5147b-1b18-4a45-9172-5ddba30f73e8'), UUID_TO_BIN('9e7628a3-8505-404a-8e7f-4b43dc841416'), 4, '["Up"]')
+ON DUPLICATE KEY UPDATE
+score = 4, moves = '["Up"]';
+
+INSERT INTO players_games (player_id, game_id, revision, score, moves)  
+VALUES (UUID_TO_BIN('77dea2ad-3c8c-40c6-a278-7cf1a1ac9385'), UUID_TO_BIN('51d5147b-1b18-4a45-9172-5ddba30f73e8'), UUID_TO_BIN('c154889f-cbc7-4dd7-8765-1c63e3a55bba'), 4, '["Left"]')
+ON DUPLICATE KEY UPDATE
+score = 4, moves = '["Left"]';
+
+UPDATE players_games SET score = 6
+WHERE player_id = UUID_TO_BIN('77dea2ad-3c8c-40c6-a278-7cf1a1ac9385') AND
+game_id = UUID_TO_BIN('51d5147b-1b18-4a45-9172-5ddba30f73e8') AND
+revision = UUID_TO_BIN('c154889f-cbc7-4dd7-8765-1c63e3a55bbb');
+
+// GET players/id/games
+select game_id from players_games where player_id = UUID_TO_BIN('77dea2ad-3c8c-40c6-a278-7cf1a1ac9384');
+
+// GET players/id/games/id
+select score, moves, BIN_TO_UUID(revision)
+from players_games
+where player_id = UUID_TO_BIN('77dea2ad-3c8c-40c6-a278-7cf1a1ac9385')
+and game_id = UUID_TO_BIN('51d5147b-1b18-4a45-9172-5ddba30f73e8');
+
+// POST players/id/games/id
+insert ignore into players_games(player_id, game_id, revision, score, moves)
+values (uuid_to_bin('77dea2ad-3c8c-40c6-a278-7cf1a1ac9385')
+, uuid_to_bin('51d5147b-1b18-4a45-9172-5ddba30f73e8')
+, uuid_to_bin('82f66e6b-9765-4a8f-b1d7-4a248877b1c8')
+, 6
+, '["Down", "Down"]');
+
+// PATCH players/id/games/id
+update players_games set 
+score = 6
+, moves = '["Down", "Down"]'
+, revision = uuid_to_bin('82f66e6b-9765-4a8f-b1d7-4a248877b1c8')
+where
+player_id = uuid_to_bin('77dea2ad-3c8c-40c6-a278-7cf1a1ac9385')
+and game_id = uuid_to_bin('51d5147b-1b18-4a45-9172-5ddba30f73e8');
+
+// GET players/id
+select display_name, last_activity, last_change
+from players
+where id = uuid_to_bin('77dea2ad-3c8c-40c6-a278-7cf1a1ac9385');
+
+// PATCH /players/id
+update players set
+display_name = "Leffe"
+, last_change = "2022-01-28 10:01"
+where id = uuid_to_bin('77dea2ad-3c8c-40c6-a278-7cf1a1ac9385')
+and last_change < "2022-01-28 10:01";
+
+// POST /players/id
+
+insert ignore into players(id, display_name, last_change)
+values (uuid_to_bin('77dea2ad-3c8c-40c6-a278-7cf1a1ac9388')
+, "Karsten"
+, "2022-01-28 10:01"
+);
+
+// GET /games/id
+select seed, size, last_activity
+from games
+where id = uuid_to_bin('51d5147b-1b18-4a45-9172-5ddba30f73e8');
+
+// POST /games/id
+insert ignore into games(id, seed, size)
+values (uuid_to_bin('51d5147b-1b18-4a45-9172-5ddba30f73ef')
+, "3"
+, "4"
+);
+
+select players_games.score, games.seed, games.size, players_games.moves
+from players_games
+join games
+  on players_games.game_id = games.id
+where players_games.player_id = uuid_to_bin('77dea2ad-3c8c-40c6-a278-7cf1a1ac9384')
+and players_games.game_id = uuid_to_bin('51d5147b-1b18-4a45-9172-5ddba30f73e8');
+
+select players.display_name, players_games.score, players.id = uuid_to_bin('96ACC997E4AE4653913DD9D3EEE25102') as requesting_player
+from players_games 
+inner join players on players_games.player_id = players.id
+where players_games.game_id = UUID_TO_BIN('0E8142F8462A430ABEB0B665C7E846A9')
+order by players_games.score;
+
